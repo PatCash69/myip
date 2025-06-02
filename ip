@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Min IP och Platsinfo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-sA+e2HTiG4bESdbLBbB8PJyEjlcxyF3qgU9L3xXwUyk="
+    crossorigin=""
+  />
+  <style>
+    #map {
+      height: 400px;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+  <div class="max-w-3xl mx-auto px-4 py-10">
+    <h1 class="text-3xl font-bold text-center mb-6">🌐 Din IP & Platsinfo</h1>
+
+    <div class="bg-white shadow-md rounded-xl p-6 space-y-4">
+      <div><span class="font-semibold">IP-adress:</span> <span id="ip">Laddar...</span></div>
+      <div><span class="font-semibold">Stad:</span> <span id="city">-</span></div>
+      <div><span class="font-semibold">Land:</span> <span id="country">-</span></div>
+      <div><span class="font-semibold">Tidszon:</span> <span id="timezone">-</span></div>
+      <div><span class="font-semibold">Webbläsare:</span> <span id="ua">-</span></div>
+      <div><span class="font-semibold">Väder:</span> <span id="weather">Hämtar...</span></div>
+    </div>
+
+    <div class="mt-6 bg-white shadow-md rounded-xl overflow-hidden">
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-o9N1jv4JrjGTTcOvRph0Wh5re+K53YgnP5CF3YDeY+E="
+    crossorigin=""
+  ></script>
+
+  <script>
+    document.getElementById('ua').textContent = navigator.userAgent;
+
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        const { ip, city, country_name, timezone, latitude, longitude } = data;
+
+        document.getElementById('ip').textContent = ip;
+        document.getElementById('city').textContent = city;
+        document.getElementById('country').textContent = country_name;
+        document.getElementById('timezone').textContent = timezone;
+
+        const map = L.map('map').setView([latitude, longitude], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap-bidragsgivare'
+        }).addTo(map);
+
+        L.marker([latitude, longitude])
+          .addTo(map)
+          .bindPopup(`Du är här: ${city}, ${country_name}`)
+          .openPopup();
+
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`)
+          .then(res => res.json())
+          .then(weatherData => {
+            const weather = weatherData.current_weather;
+            const temp = weather.temperature;
+            const weatherCode = weather.weathercode;
+            const iconMap = {
+              0: '☀️ Klart',
+              1: '🌤️ Mest klart',
+              2: '⛅ Delvis molnigt',
+              3: '☁️ Molnigt',
+              45: '🌫️ Dimma',
+              48: '🌫️ Dimma',
+              51: '🌦️ Lätt duggregn',
+              61: '🌧️ Regn',
+              71: '🌨️ Snö',
+              95: '⛈️ Åska'
+            };
+            const desc = iconMap[weatherCode] || '🌡️ Väder';
+            document.getElementById('weather').textContent = `${desc} ${temp}°C`;
+          })
+          .catch(() => {
+            document.getElementById('weather').textContent = 'Kunde inte hämta väder.';
+          });
+      })
+      .catch(() => {
+        document.getElementById('ip').textContent = 'Kunde inte hämta data.';
+      });
+  </script>
+</body>
+</html>
