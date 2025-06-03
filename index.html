@@ -1,0 +1,135 @@
+
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IP & Platsinfo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>#map { height: 350px; }</style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans leading-relaxed">
+  <div class="max-w-4xl mx-auto px-4 py-10">
+    <h1 class="text-3xl font-bold text-center mb-6">🌐 IP & Platsinformation</h1>
+    <div class="grid md:grid-cols-2 gap-6">
+      <div class="bg-white shadow-md rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-semibold">🧾 Din information</h2>
+        <p><strong>IP:</strong> <span id="ip">Laddar...</span></p>
+        <p><strong>Stad:</strong> <span id="city">-</span></p>
+        <p><strong>Land:</strong> <span id="country">-</span></p>
+        <p><strong>Tidszon:</strong> <span id="timezone">-</span></p>
+        <p><strong>ISP:</strong> <span id="isp">-</span></p>
+        <p><strong>Webbläsare:</strong> <span id="ua">-</span></p>
+        <p><strong>Väder:</strong> <span id="weather">Hämtar...</span></p>
+      </div>
+      <div class="bg-white shadow-md rounded-xl p-6 space-y-3">
+        <h2 class="text-xl font-semibold">⚡ Hastighetstest</h2>
+        <p><strong>Nedladdning:</strong> <span id="download">-</span> Mbps</p>
+        <p><strong>Uppladdning:</strong> <span id="upload">-</span> Mbps</p>
+        <button id="speedBtn" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded">
+          Kör test
+        </button>
+        <p class="mt-4 text-green-700 font-medium" id="speed-summary"></p>
+      </div>
+    </div>
+    <div class="mt-8 bg-white shadow-md rounded-xl overflow-hidden">
+      <div id="map" class="rounded-b-xl"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    document.getElementById('ua').textContent = navigator.userAgent;
+
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        const { ip, city, country_name, timezone, org, latitude, longitude } = data;
+        document.getElementById('ip').textContent = ip;
+        document.getElementById('city').textContent = city;
+        document.getElementById('country').textContent = country_name;
+        document.getElementById('timezone').textContent = timezone;
+        document.getElementById('isp').textContent = org;
+
+        const map = L.map('map').setView([latitude, longitude], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+        L.marker([latitude, longitude])
+          .addTo(map)
+          .bindPopup(`Du är här: ${city}, ${country_name}`)
+          .openPopup();
+
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`)
+          .then(res => res.json())
+          .then(weatherData => {
+            const w = weatherData.current_weather;
+            const iconMap = {
+              0: '☀️ Klart', 1: '🌤️ Mest klart', 2: '⛅ Delvis molnigt', 3: '☁️ Molnigt',
+              45: '🌫️ Dimma', 48: '🌫️ Dimma', 51: '🌦️ Duggregn', 61: '🌧️ Regn',
+              71: '🌨️ Snö', 95: '⛈️ Åska'
+            };
+            const desc = iconMap[w.weathercode] || '🌡️ Väder';
+            document.getElementById('weather').textContent = `${desc} ${w.temperature}°C`;
+          });
+      });
+
+    function runSpeedTest() {
+      const downloadEl = document.getElementById("download");
+      const uploadEl = document.getElementById("upload");
+      const summaryEl = document.getElementById("speed-summary");
+      summaryEl.textContent = "";
+      downloadEl.textContent = "Testar...";
+      uploadEl.textContent = "Testar...";
+
+      const downloadSizeBytes = 10 * 1024 * 1024;
+      const downloadUrl = "https://speed.hetzner.de/10MB.bin";
+      const startDownload = performance.now();
+
+      fetch(downloadUrl)
+        .then((res) => res.blob())
+        .then(() => {
+          const endDownload = performance.now();
+          const durationSec = (endDownload - startDownload) / 1000;
+          const speedMbps = ((downloadSizeBytes * 8) / durationSec / 1_000_000).toFixed(2);
+          downloadEl.textContent = speedMbps;
+          summarizeSpeed(parseFloat(speedMbps), null);
+        });
+
+      const uploadSizeBytes = 5 * 1024 * 1024;
+      const data = new Blob([new Uint8Array(uploadSizeBytes).fill(1)], { type: "application/octet-stream" });
+      const startUpload = performance.now();
+
+      fetch("https://httpbin.org/post", { method: "POST", body: data })
+        .then((res) => res.json())
+        .then(() => {
+          const endUpload = performance.now();
+          const durationSec = (endUpload - startUpload) / 1000;
+          const speedMbps = ((uploadSizeBytes * 8) / durationSec / 1_000_000).toFixed(2);
+          uploadEl.textContent = speedMbps;
+          summarizeSpeed(null, parseFloat(speedMbps));
+        });
+
+      let speeds = { download: null, upload: null };
+      function summarizeSpeed(d, u) {
+        if (d !== null) speeds.download = d;
+        if (u !== null) speeds.upload = u;
+
+        if (speeds.download && speeds.upload) {
+          const { download, upload } = speeds;
+          let summary = "🏁 Testresultat: ";
+          if (download > 50) summary += "Snabb lina för HD/4K-video, ";
+          else if (download > 10) summary += "Okej för streaming, ";
+          else summary += "Långsam lina, ";
+          if (upload > 10) summary += "bra för molnbackup.";
+          else if (upload > 2) summary += "ok för samtal och uppladdning.";
+          else summary += "kan ge problem vid uppladdning.";
+          summaryEl.textContent = summary;
+        }
+      }
+    }
+
+    document.getElementById("speedBtn").addEventListener("click", runSpeedTest);
+  </script>
+</body>
+</html>
